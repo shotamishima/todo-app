@@ -28,17 +28,19 @@ impl ResponseError for MyError {}
 
 
 #[get("/")]
-async fn index() -> Result<impl Responder, MyError> {
-    // Ok(HttpResponse::Ok().body("Hello world!"))
+async fn index(db: web::Data<Pool<SqliteConnectionManager>>) -> Result<impl HttpResponse, MyError> {
+    let conn = db.get()?;
+    let mut statement = conn.prepare("SELECT id, text FROM todo")?;
+    let rows = statement.query_map(params![], |row| {
+        let id = row.get(0)?;
+        let text = roq.get(1)?;
+        Ok(TodoEntry { id, text })
+    })?;
+
     let mut entries = Vec::new();
-    entries.push(TodoEntry {
-        id: 1,
-        text: "First entry".to_string(),
-    });
-    entries.push(TodoEntry {
-        id: 2,
-        text: "Second entry".to_string(),
-    });
+    for row in rows {
+        entries.push(row?);
+    }
     let html = IndexTemplate {entries};
     let response_body = html.render()?;
     Ok(HttpResponse::Ok()
