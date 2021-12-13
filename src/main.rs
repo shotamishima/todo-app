@@ -1,6 +1,10 @@
 use actix_web::{get, App, HttpResponse, HttpServer, Responder, ResponseError};
 use askama::Template;
 use thiserror::Error;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
+
 
 // htmlに埋め込むためデータの構造体
 struct TodoEntry {
@@ -44,7 +48,21 @@ async fn index() -> Result<impl Responder, MyError> {
 
 #[actix_web::main]
 async fn main() -> Result<(), actix_web::Error> {
-    HttpServer::new(|| App::new().service(index))
+    let manager = SqliteConnectionManager::file("todo.db");
+    let pool = Pool::new(manager).expect("Failed to initialize the connection pool.");
+    let conn = pool
+        .get()
+        .expect("Failed to get the connection from the pool.");
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS todo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL
+        )",
+        params![],
+        )
+        .expect("Failed to create a table `todo`.");
+    // コネクションプールをdata関数で渡す
+    HttpServer::new(move || App::new().service(index).data(pool.clone()))
         .bind("0.0.0.0:8080")?
         .run()
         .await?;
